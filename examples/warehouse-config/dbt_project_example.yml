@@ -1,0 +1,123 @@
+# examples/warehouse-config/dbt_project_example.yml
+#
+# Warehouse assignment by folder structure
+#
+# This example shows how to assign different warehouses to different
+# model folders. The key insight: staging models don't need the same
+# compute as heavy analytics models.
+#
+# Adjust warehouse names and folder structure to match your project.
+
+name: 'my_analytics_project'
+version: '1.0.0'
+config-version: 2
+
+profile: 'my_project'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+# ========================================
+# WAREHOUSE ASSIGNMENTS
+# ========================================
+# 
+# Each folder level inherits from its parent unless overridden.
+# More specific paths override less specific ones.
+
+models:
+  my_analytics_project:
+    
+    # ----------------------------------------
+    # STAGING: Light compute, simple transforms
+    # ----------------------------------------
+    # Small warehouse is sufficient for:
+    #   - Column selection
+    #   - Type casting
+    #   - Basic filtering
+    #   - Renaming
+    staging:
+      +snowflake_warehouse: STAGING_WH  # Small (2 credits/hr)
+      +materialized: view  # Views for most staging models
+    
+    # ----------------------------------------
+    # INTERMEDIATE: Moderate compute
+    # ----------------------------------------
+    # Medium warehouse for:
+    #   - Joins between staging models
+    #   - Moderate aggregations
+    #   - Business logic transformations
+    intermediate:
+      +snowflake_warehouse: TRANSFORM_WH  # Medium (4 credits/hr)
+      +materialized: table
+    
+    # ----------------------------------------
+    # MARTS: Standard analytics
+    # ----------------------------------------
+    # Medium warehouse for most mart models
+    marts:
+      +snowflake_warehouse: ANALYTICS_WH  # Medium (4 credits/hr)
+      +materialized: table
+      
+      # Override for specific heavy workloads
+      # These folders contain models with complex joins or large aggregations
+      finance:
+        monthly_aggregations:
+          +snowflake_warehouse: FINANCE_WH  # Large (8 credits/hr)
+        
+      operations:
+        inventory_analysis:
+          +snowflake_warehouse: HEAVY_WH  # Large (8 credits/hr)
+
+
+# ========================================
+# THREAD CONFIGURATION
+# ========================================
+#
+# Threads determine how many models run in parallel.
+# Match threads to warehouse size for efficiency.
+#
+# These settings are typically in profiles.yml, but shown here
+# for reference:
+#
+# profiles.yml:
+#   my_project:
+#     target: prod
+#     outputs:
+#       prod:
+#         type: snowflake
+#         threads: 8  # Match to your primary warehouse size
+#         ...
+#
+# Thread guidelines by warehouse:
+#   X-Small: 1-2 threads
+#   Small: 2-4 threads
+#   Medium: 4-8 threads
+#   Large: 8-16 threads
+#
+# Too many threads = queries queue waiting for resources
+# Too few threads = warehouse capacity sits idle
+
+
+# ========================================
+# DEV VS PROD
+# ========================================
+#
+# Development environments often use smaller warehouses.
+# Set this in profiles.yml:
+#
+# profiles.yml:
+#   my_project:
+#     target: dev
+#     outputs:
+#       dev:
+#         type: snowflake
+#         warehouse: DEV_WH  # Small
+#         threads: 4
+#       prod:
+#         type: snowflake
+#         warehouse: PROD_WH  # Use folder configs above
+#         threads: 8

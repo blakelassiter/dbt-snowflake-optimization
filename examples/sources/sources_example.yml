@@ -1,0 +1,140 @@
+# Example sources.yml with freshness configuration
+#
+# Key patterns:
+# - Source-level defaults for database, schema, freshness
+# - Table-level overrides for different SLAs
+# - Descriptions for documentation
+# - Filters for large tables
+
+version: 2
+
+sources:
+  # Primary transactional data
+  - name: raw_ecommerce
+    description: Transactional data from main ecommerce platform
+    database: raw
+    schema: ecommerce
+    
+    # Default freshness for all tables in this source
+    freshness:
+      warn_after:
+        count: 12
+        period: hour
+      error_after:
+        count: 24
+        period: hour
+    
+    # Default timestamp column for freshness checks
+    loaded_at_field: _loaded_at
+    
+    tables:
+      - name: orders
+        description: Customer orders with line items
+        # Tighter SLA for critical table
+        freshness:
+          warn_after:
+            count: 4
+            period: hour
+          error_after:
+            count: 8
+            period: hour
+        columns:
+          - name: order_id
+            description: Primary key
+          - name: customer_id
+            description: Foreign key to customers
+          - name: order_date
+            description: Date order was placed
+          - name: _loaded_at
+            description: ETL load timestamp
+
+      - name: customers
+        description: Customer master data
+        columns:
+          - name: customer_id
+            description: Primary key
+          - name: email
+            description: Customer email address
+          - name: created_at
+            description: Account creation timestamp
+
+      - name: products
+        description: Product catalog
+        # Product catalog updates less frequently
+        freshness:
+          warn_after:
+            count: 48
+            period: hour
+          error_after:
+            count: 72
+            period: hour
+
+  # High-volume event data
+  - name: raw_events
+    description: Clickstream and behavioral events
+    database: raw
+    schema: events
+    
+    freshness:
+      warn_after:
+        count: 2
+        period: hour
+      error_after:
+        count: 6
+        period: hour
+    
+    tables:
+      - name: page_views
+        description: Page view events from web and mobile
+        loaded_at_field: event_timestamp
+        # Filter to only check recent partitions
+        freshness:
+          filter: event_date >= current_date() - 1
+
+      - name: clicks
+        description: Click events
+        loaded_at_field: event_timestamp
+        freshness:
+          filter: event_date >= current_date() - 1
+
+  # Third-party data (less frequent updates)
+  - name: raw_external
+    description: Data from third-party vendors
+    database: raw
+    schema: external
+    
+    freshness:
+      warn_after:
+        count: 36
+        period: hour
+      error_after:
+        count: 48
+        period: hour
+    loaded_at_field: _synced_at
+    
+    tables:
+      - name: marketing_spend
+        description: Marketing spend by channel from ad platforms
+
+      - name: inventory_levels
+        description: Inventory data from warehouse system
+        # Inventory updates less frequently
+        freshness:
+          warn_after:
+            count: 24
+            period: hour
+
+  # Reference data (very infrequent updates)
+  - name: raw_reference
+    description: Slowly changing reference data
+    database: raw
+    schema: reference
+    
+    # No freshness checks - these rarely update
+    freshness: null
+    
+    tables:
+      - name: countries
+        description: Country code lookup
+      - name: currencies
+        description: Currency code lookup

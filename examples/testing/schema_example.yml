@@ -1,0 +1,118 @@
+# Example schema.yml with test patterns for cost-optimized dbt projects
+#
+# Key patterns:
+# - Primary key tests on every model
+# - where config to limit test scope on large tables
+# - Relationship tests for referential integrity
+# - Tags for selective test execution
+
+version: 2
+
+models:
+  # Staging model - lightweight tests
+  - name: stg_orders
+    description: Cleaned orders from source system
+    columns:
+      - name: order_id
+        description: Primary key from source
+        data_tests:
+          - unique
+          - not_null
+
+      - name: customer_id
+        description: Foreign key to customers
+        data_tests:
+          - not_null
+
+      - name: order_date
+        description: Date order was placed
+        data_tests:
+          - not_null
+
+  # Fact table - comprehensive tests with performance configs
+  - name: fct_orders
+    description: Order fact table with metrics
+    config:
+      tags: ['core', 'daily']
+    columns:
+      - name: order_id
+        description: Surrogate key for order
+        data_tests:
+          - unique
+          - not_null
+
+      - name: customer_id
+        description: Foreign key to dim_customers
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+
+      - name: order_status
+        description: Current status of the order
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'processing', 'shipped', 'delivered', 'cancelled']
+
+      - name: order_total
+        description: Total order value in USD
+        data_tests:
+          - not_null
+
+  # Incremental model - tests that validate incremental logic
+  - name: fct_events
+    description: User events - large incremental table
+    columns:
+      - name: event_id
+        description: Unique event identifier
+        data_tests:
+          # Test uniqueness only on recent data for performance
+          - unique:
+              config:
+                where: "event_date >= current_date() - 7"
+          - not_null
+
+      - name: user_id
+        description: User who triggered the event
+        data_tests:
+          - not_null:
+              config:
+                where: "event_date >= current_date() - 7"
+          - relationships:
+              to: ref('dim_users')
+              field: user_id
+              config:
+                where: "event_date >= current_date() - 7"
+
+      - name: event_type
+        description: Type of event
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['page_view', 'click', 'purchase', 'signup']
+              config:
+                where: "event_date >= current_date() - 1"
+
+  # Dimension table
+  - name: dim_customers
+    description: Customer dimension with attributes
+    columns:
+      - name: customer_id
+        description: Primary key
+        data_tests:
+          - unique
+          - not_null
+
+      - name: email
+        description: Customer email address
+        data_tests:
+          - unique
+          - not_null
+
+      - name: customer_segment
+        description: Customer segmentation tier
+        data_tests:
+          - accepted_values:
+              values: ['standard', 'premium', 'enterprise']

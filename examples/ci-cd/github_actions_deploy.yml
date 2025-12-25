@@ -1,0 +1,136 @@
+# GitHub Actions Workflow: Production Deployment
+#
+# Runs dbt in production when changes merge to main.
+# Also runs on a schedule for regular data refreshes.
+#
+# Secrets required:
+# - SNOWFLAKE_ACCOUNT
+# - SNOWFLAKE_USER
+# - SNOWFLAKE_PASSWORD
+# - AWS_ACCESS_KEY_ID
+# - AWS_SECRET_ACCESS_KEY
+
+name: dbt Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'models/**'
+      - 'macros/**'
+      - 'seeds/**'
+      - 'snapshots/**'
+      - 'dbt_project.yml'
+  
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: 'Run full refresh'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  DBT_PROFILES_DIR: ${{ github.workspace }}
+  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+
+jobs:
+  dbt-prod:
+    name: dbt Production Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install dbt-snowflake~=1.8.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Check source freshness
+        run: dbt source freshness --target prod
+        continue-on-error: true
+
+      - name: Run dbt build
+        run: |
+          if [ "${{ github.event.inputs.full_refresh }}" == "true" ]; then
+            dbt build --target prod --full-refresh
+          else
+            dbt build --target prod
+          fi
+
+      - name: Generate docs
+        run: dbt docs generate --target prod
+
+      - name: Upload manifest to S3
+        run: |
+          aws s3 cp target/manifest.json s3://your-bucket/dbt-artifacts/manifest.json
+          aws s3 cp target/run_results.json s3://your-bucket/dbt-artifacts/run_results.json
+
+      - name: Upload docs to S3
+        run: |
+          aws s3 sync target/ s3://your-bucket/dbt-docs/ \
+            --exclude "*" \
+            --include "*.html" \
+            --include "*.json" \
+            --include "*.css" \
+            --include "*.js"
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ dbt Production Build Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "dbt production build failed. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-prod-artifacts
+          path: |
+            target/run_results.json
+            target/manifest.json
+            target/sources.json
+          retention-days: 30

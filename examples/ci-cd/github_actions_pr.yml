@@ -1,0 +1,134 @@
+# GitHub Actions Workflow: Pull Request CI
+#
+# Runs dbt builds and tests on pull requests using Slim CI.
+# Only builds models that changed compared to production.
+#
+# Prerequisites:
+# 1. Store production manifest.json in S3/GCS after each prod run
+# 2. Configure repository secrets for Snowflake credentials
+# 3. Create a CI warehouse in Snowflake
+#
+# Secrets required:
+# - SNOWFLAKE_ACCOUNT
+# - SNOWFLAKE_USER
+# - SNOWFLAKE_PASSWORD
+# - AWS_ACCESS_KEY_ID (if using S3)
+# - AWS_SECRET_ACCESS_KEY (if using S3)
+
+name: dbt PR CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+    paths:
+      - 'models/**'
+      - 'macros/**'
+      - 'seeds/**'
+      - 'snapshots/**'
+      - 'dbt_project.yml'
+      - 'packages.yml'
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: dbt-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  DBT_PROFILES_DIR: ${{ github.workspace }}
+  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+
+jobs:
+  dbt-ci:
+    name: dbt Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install dbt-snowflake~=1.8.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Download production manifest
+        run: |
+          mkdir -p ./prod-state
+          aws s3 cp s3://your-bucket/dbt-artifacts/manifest.json ./prod-state/
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Run dbt build (Slim CI)
+        run: |
+          dbt build \
+            --select state:modified+ \
+            --defer \
+            --state ./prod-state \
+            --target ci \
+            --fail-fast
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-artifacts
+          path: |
+            target/run_results.json
+            target/manifest.json
+            logs/
+
+      - name: Comment on PR with results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## dbt CI Results\n\n';
+            
+            try {
+              const results = JSON.parse(fs.readFileSync('target/run_results.json'));
+              const passed = results.results.filter(r => r.status === 'pass').length;
+              const failed = results.results.filter(r => r.status === 'error' || r.status === 'fail').length;
+              const skipped = results.results.filter(r => r.status === 'skipped').length;
+              
+              comment += `✅ Passed: ${passed}\n`;
+              comment += `❌ Failed: ${failed}\n`;
+              comment += `⏭️ Skipped: ${skipped}\n`;
+              
+              if (failed > 0) {
+                comment += '\n### Failures\n';
+                results.results
+                  .filter(r => r.status === 'error' || r.status === 'fail')
+                  .forEach(r => {
+                    comment += `- ${r.unique_id}: ${r.message}\n`;
+                  });
+              }
+            } catch (e) {
+              comment += '⚠️ Could not parse results\n';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
