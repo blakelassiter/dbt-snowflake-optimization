@@ -158,7 +158,7 @@ These examples come from an 8-part series with full context and explanations:
 5. [dbt Development Workflow: How We Cut Build Time by 98%](https://medium.com/@blakelassiter/dbt-development-workflow-how-we-cut-build-time-by-98-5eb25b682116)
 6. [5 SQL Patterns for Faster Snowflake Queries in dbt](https://medium.com/@blakelassiter/5-sql-patterns-for-faster-snowflake-queries-in-dbt-fa3d8c695322)
 7. [Snowflake Warehouse Sizing for dbt: A Practical Guide](https://medium.com/@blakelassiter/snowflake-warehouse-sizing-for-dbt-a-practical-guide-2f674a720f29)
-8. Building dbt Optimization Into Team Culture (coming soon)
+8. [Building dbt Optimization Into Team Culture](https://medium.com/@blakelassiter/building-dbt-optimization-into-team-culture-514fa64409c2)
 
 ## Additional Resources
 
@@ -171,3 +171,6 @@ Found an issue or have a pattern to add? PRs welcome. See [CONTRIBUTING.md](CONT
 ## License
 
 MIT - see [LICENSE](LICENSE)
+
+## About
+Maintained by [Blake Lassiter](https://www.linkedin.com/in/blakelassiter/) - Principal Data Architect & Engineer focused on modern data stack optimization and production AI systems.
