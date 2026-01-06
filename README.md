@@ -151,6 +151,8 @@ And `docs/common_mistakes.md` for anti-patterns to avoid.
 
 These examples come from an 8-part series with full context and explanations:
 
+**[Complete Series Index](https://medium.com/@blakelassiter/the-complete-guide-to-dbt-snowflake-optimization-8-part-series-af4b2a1f213e)** — Overview and reading guide
+
 1. [How I Cut Our dbt + Snowflake Costs by 60%](https://medium.com/@blakelassiter/how-i-cut-our-dbt-snowflake-costs-by-60-fc8e946c4b37)
 2. [4 Decisions That Control 90% of Your dbt + Snowflake Costs](https://medium.com/@blakelassiter/4-decisions-that-control-90-of-your-dbt-snowflake-costs-299113dc408c)
 3. [dbt Materialization Strategy: Why Most Models Are Wrong](https://medium.com/@blakelassiter/dbt-materialization-strategy-why-most-models-are-wrong-094848667a09)
@@ -160,9 +162,7 @@ These examples come from an 8-part series with full context and explanations:
 7. [Snowflake Warehouse Sizing for dbt: A Practical Guide](https://medium.com/@blakelassiter/snowflake-warehouse-sizing-for-dbt-a-practical-guide-2f674a720f29)
 8. [Building dbt Optimization Into Team Culture](https://medium.com/@blakelassiter/building-dbt-optimization-into-team-culture-514fa64409c2)
 
-## Additional Resources
-
-- [Essentials Guide + Quick Reference Card](https://blakelassiter.gumroad.com/l/dbt-snowflake-optimization) - condensed PDF versions
+**[Free Essentials Guide + Quick Reference Card](https://blakelassiter.gumroad.com/l/dbt-snowflake-optimization)** — Condensed PDF reference
 
 ## Contributing
 
